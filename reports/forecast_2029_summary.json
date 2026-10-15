@@ -1,0 +1,27 @@
+{
+  "swing": 0.0,
+  "swing_sd": 5.0,
+  "summary": {
+    "NDA": {
+      "mean": 188.3,
+      "median": 190,
+      "p05": 141,
+      "p95": 231,
+      "p_majority": 0.935
+    },
+    "UPA": {
+      "mean": 89.3,
+      "median": 88,
+      "p05": 47,
+      "p95": 137,
+      "p_majority": 0.028
+    },
+    "OTH": {
+      "mean": 10.4,
+      "median": 10,
+      "p05": 6,
+      "p95": 16,
+      "p_majority": 0.0
+    }
+  }
+}
