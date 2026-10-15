@@ -8,6 +8,8 @@ mood as 2024"; negative values mean a swing toward UPA/MVA.
     python forecast.py --swing -8      # custom central scenario
     python forecast.py --alliances thackeray_alliance congress_alone
                                        # replay 2024 under post-2024 alliances
+    python forecast.py --roll-genuine 0.15 --roll-lean -20
+                                       # SIR 2026 voter-roll scenario (see voter_roll.py)
 """
 import argparse
 import json
@@ -22,6 +24,7 @@ import pandas as pd
 from config import (ALLIANCE_CHANGES, FIGURES_DIR, MAJORITY, MODELS_DIR, PROCESSED_DIR,
                     REPORTS_DIR, alliance_changes)
 from features import build_all, forecast_features
+from voter_roll import margin_shift
 
 SCENARIOS = [-20, -15, -10, -5, 0, 5]
 SWING_SD = 5.0  # uncertainty around the chosen statewide swing (pp)
@@ -40,10 +43,14 @@ def load_forecast_features(changes: dict[str, str] | None = None) -> pd.DataFram
     return pd.read_csv(path)
 
 
-def run(swing: float, n_sims: int = 5000, changes: dict[str, str] | None = None) -> dict:
+def run(swing: float, n_sims: int = 5000, changes: dict[str, str] | None = None,
+        roll: tuple[float, float] | None = None) -> dict:
+    """``roll`` = (genuine_share, lean) for the voter-roll scenario, or None."""
     model = load_model()
     df = load_forecast_features(changes)
-    sim = model.simulate(df, swing=swing, swing_sd=SWING_SD, n_sims=n_sims)
+    shift = margin_shift(df["ac_no"], *roll) if roll else None
+    sim = model.simulate(df, swing=swing, swing_sd=SWING_SD, n_sims=n_sims,
+                         margin_shift=shift)
     seats = df[["ac_no", "ac_name", "district", "region", "ac_type", "winner_party",
                 "winner_camp", "nda_margin"]].rename(columns={
                     "winner_party": "party_2024", "winner_camp": "camp_2024",
@@ -90,17 +97,22 @@ def main() -> None:
     parser.add_argument("--sims", type=int, default=5000)
     parser.add_argument("--alliances", nargs="*", default=[], choices=list(ALLIANCE_CHANGES),
                         help="post-2024 alliance changes to apply to the 2024 base")
+    parser.add_argument("--roll-genuine", type=float, default=0.15,
+                        help="share of SIR-excluded electors who were genuine voters")
+    parser.add_argument("--roll-lean", type=float, default=0.0,
+                        help="their NDA-UPA lean vs their seat (pp, negative = MVA); 0 = no effect")
     args = parser.parse_args()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     changes = alliance_changes(args.alliances)
+    roll = (args.roll_genuine, args.roll_lean)
 
-    sim = run(args.swing, args.sims, changes)
+    sim = run(args.swing, args.sims, changes, roll)
     sim["seat_probs"].to_csv(REPORTS_DIR / "forecast_2029_seats.csv", index=False)
     plot_distribution(sim["seat_draws"], args.swing)
 
     rows = []
     for s in sorted(set(SCENARIOS + [args.swing])):
-        summ = run(s, 2000, changes)["summary"]
+        summ = run(s, 2000, changes, roll)["summary"]
         row = {"swing": s}
         for camp, st in summ.items():
             row.update({f"{camp}_{k}": v for k, v in st.items()})
@@ -115,7 +127,7 @@ def main() -> None:
     combos["Both changes"] = list(ALLIANCE_CHANGES)
     alliance_rows = []
     for label, keys in combos.items():
-        summ = run(args.swing, 2000, alliance_changes(keys))["summary"]
+        summ = run(args.swing, 2000, alliance_changes(keys), roll)["summary"]
         alliance_rows.append({"alliances": label,
                               **{f"{c}_median": summ[c]["median"] for c in summ},
                               "NDA_p_majority": summ["NDA"]["p_majority"],
@@ -123,14 +135,28 @@ def main() -> None:
     alliance_table = pd.DataFrame(alliance_rows)
     alliance_table.to_csv(REPORTS_DIR / "forecast_2029_alliance_scenarios.csv", index=False)
 
+    # Voter-roll sensitivity: how much would SIR deletions matter, and when?
+    roll_rows = []
+    for genuine in (0.10, 0.20, 0.30):
+        for lean in (-30, -15, 0, 15):
+            summ = run(args.swing, 2000, changes, (genuine, lean))["summary"]
+            roll_rows.append({"genuine_share": genuine, "lean": lean,
+                              "NDA_median": summ["NDA"]["median"],
+                              "UPA_median": summ["UPA"]["median"],
+                              "NDA_p_majority": summ["NDA"]["p_majority"]})
+    roll_table = pd.DataFrame(roll_rows)
+    roll_table.to_csv(REPORTS_DIR / "forecast_2029_voter_roll.csv", index=False)
+
     with open(REPORTS_DIR / "forecast_2029_summary.json", "w") as f:
         json.dump({"swing": args.swing, "swing_sd": SWING_SD, "alliances": args.alliances,
+                   "voter_roll": {"genuine_share": args.roll_genuine, "lean": args.roll_lean},
                    "summary": sim["summary"]}, f, indent=2)
     print(f"Central scenario: swing {args.swing:+.1f} pp")
     print(json.dumps(sim["summary"], indent=2))
     print(table[["swing", "NDA_median", "NDA_p05", "NDA_p95", "UPA_median",
                  "NDA_p_majority", "UPA_p_majority"]].to_string(index=False))
     print(alliance_table.to_string(index=False))
+    print(roll_table.to_string(index=False))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from config import (ALLIANCE_CHANGES, MAJORITY, PROCESSED_DIR,  # noqa: E402
                     REPORTS_DIR, alliance_changes)
 from forecast import load_forecast_features, load_model  # noqa: E402
+from voter_roll import SOURCE as SIR_SOURCE  # noqa: E402
+from voter_roll import district_rates, margin_shift, seat_rates  # noqa: E402
 
 st.set_page_config(page_title="Maharashtra 2029 Forecast", page_icon="🗳️", layout="wide")
 
@@ -26,9 +28,12 @@ def get_features(alliance_keys: tuple[str, ...]):
 
 
 @st.cache_data
-def simulate(swing: float, swing_sd: float, n_sims: int, alliance_keys: tuple[str, ...]):
+def simulate(swing: float, swing_sd: float, n_sims: int, alliance_keys: tuple[str, ...],
+             roll: tuple[float, float] | None = None):
     df = get_features(alliance_keys)
-    sim = get_model().simulate(df, swing=swing, swing_sd=swing_sd, n_sims=n_sims)
+    shift = margin_shift(df["ac_no"], *roll) if roll else None
+    sim = get_model().simulate(df, swing=swing, swing_sd=swing_sd, n_sims=n_sims,
+                               margin_shift=shift)
     seats = df[["ac_no", "ac_name", "district", "region", "ac_type", "winner_party",
                 "winner_camp", "nda_margin"]].merge(sim["seat_probs"], on="ac_no")
     return seats, sim["seat_draws"], sim["summary"]
@@ -53,16 +58,31 @@ with st.sidebar:
         key for key, a in ALLIANCE_CHANGES.items()
         if st.checkbox(a["label"], help=a["note"])
     )
+    st.header("Voter-roll revision (SIR 2026)")
+    use_roll = st.checkbox(
+        "Apply SIR draft-roll exclusions",
+        help="21.1% of electors were left out of the 31 Aug 2026 draft roll "
+             "(9% in Hingoli to 38% in Thane). Effect depends on the two assumptions below.")
+    roll = None
+    if use_roll:
+        genuine = st.slider("Genuine voters among those excluded", 0.0, 0.5, 0.15, 0.05,
+                            format="%.2f",
+                            help="The rest are dead, shifted or duplicate entries who "
+                                 "wouldn't have voted in that seat anyway.")
+        lean = st.slider("Their lean vs their seat (pp)", -40.0, 40.0, 0.0, 1.0,
+                         help="Negative = they leaned MVA/UPA (the opposition's claim); "
+                              "0 = same as everyone else (no effect).")
+        roll = (genuine, lean)
     st.markdown(
         "**How to read this:** each simulation draws a statewide swing, then "
         "correlated region, district and seat errors sized from the model's "
         "real 2024 back-test error."
     )
 
-seats, draws, summary = simulate(swing, swing_sd, n_sims, alliance_keys)
+seats, draws, summary = simulate(swing, swing_sd, n_sims, alliance_keys, roll)
 
-tab_fc, tab_seats, tab_bt, tab_hist = st.tabs(
-    ["Forecast", "Constituency explorer", "2024 back-test", "History"])
+tab_fc, tab_seats, tab_roll, tab_bt, tab_hist = st.tabs(
+    ["Forecast", "Constituency explorer", "Voter-roll revision", "2024 back-test", "History"])
 
 with tab_fc:
     with st.expander("Current conditions (as of Oct 2026): what has changed since 2024", expanded=False):
@@ -76,12 +96,21 @@ with tab_fc:
             "with MNS** in Mumbai: toggle these in the sidebar.\n"
             "- **Ajit Pawar died in a plane crash on 28 Jan 2026**; Sunetra Pawar now leads "
             "NCP and holds Baramati. Its effect on the NCP vote can't be measured without "
-            "polling, so it's not modelled.\n\n"
+            "polling, so it's not modelled.\n"
+            "- **SIR 2026 voter-roll revision:** 2.07 crore electors (21.1%) were left out "
+            "of the draft roll, mostly in urban districts. Toggle it in the sidebar; see the "
+            "*Voter-roll revision* tab.\n"
+            "- **Cockroach Janta Party (CJP) protests** over the roll revision (Oct 2026): "
+            "not a contesting party and no measurable vote data, so any effect on youth "
+            "turnout or mood can only be explored via the statewide swing slider.\n\n"
             "Local-body results are a different kind of election and are not fed into the model."
         )
     if alliance_keys:
         st.info("Applied: " + "; ".join(ALLIANCE_CHANGES[k]["label"] for k in alliance_keys)
                 + ". " + " ".join(ALLIANCE_CHANGES[k]["note"] for k in alliance_keys))
+    if roll:
+        st.info(f"Voter-roll scenario on: {roll[0]:.0%} of excluded electors were genuine "
+                f"voters, leaning {roll[1]:+.0f} pp vs their seat.")
     cols = st.columns(4)
     for col, camp in zip(cols, ["NDA", "UPA", "OTH"]):
         s = summary[camp]
@@ -132,6 +161,35 @@ with tab_seats:
     st.subheader("All constituencies")
     st.dataframe(seats.drop(columns=["ac_no"]).round(3), width="stretch",
                  hide_index=True)
+
+with tab_roll:
+    st.markdown(
+        "The **Special Intensive Revision (SIR) 2026** draft roll (31 Aug 2026) left out "
+        "**2,06,88,487 of 9,78,54,049 electors (21.1%)**. No past election had a revision "
+        "like this, so the model can't *learn* its effect. It's applied as an explicit "
+        "adjustment instead: if a share *f* of a seat's voters is removed and they leaned "
+        "*L* points relative to the seat, the seat's NDA-UPA margin shifts by "
+        "**−L·f/(1−f)**, where *f* = genuine share × the district's exclusion rate."
+    )
+    rates = district_rates().sort_values("exclusion_rate", ascending=False)
+    rates["exclusion_rate"] = (100 * rates["exclusion_rate"]).round(1)
+    c1, c2 = st.columns([3, 2])
+    c1.subheader("Exclusion rate by district (%)")
+    c1.bar_chart(rates.set_index("district")["exclusion_rate"], height=420)
+    c2.subheader("Seats per exclusion band")
+    sr = seat_rates()
+    bands = pd.cut(100 * sr["exclusion_rate"], [0, 15, 25, 35, 40],
+                   labels=["<15%", "15-25%", "25-35%", "35-40%"])
+    c2.dataframe(bands.value_counts().sort_index().rename("seats"), width="stretch")
+    c2.caption("Urban districts (Thane, Mumbai, Pune, Nagpur, Palghar) dominate.")
+    sens_path = REPORTS_DIR / "forecast_2029_voter_roll.csv"
+    if sens_path.exists():
+        st.subheader("Sensitivity (swing 0, 2024 alliances)")
+        st.dataframe(pd.read_csv(sens_path), width="stretch", hide_index=True)
+        st.caption("Even strong assumptions move the NDA median by under ~10 seats: the "
+                   "shift is a few points at most, concentrated in urban seats.")
+    st.caption(f"Source: {SIR_SOURCE}. Final rolls are due 4 Nov 2026; district figures "
+               "stand in for seat-level ones until then.")
 
 with tab_bt:
     metrics = json.loads((REPORTS_DIR / "metrics.json").read_text())

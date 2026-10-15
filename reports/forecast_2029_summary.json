@@ -2,6 +2,10 @@
   "swing": 0.0,
   "swing_sd": 5.0,
   "alliances": [],
+  "voter_roll": {
+    "genuine_share": 0.15,
+    "lean": 0.0
+  },
   "summary": {
     "NDA": {
       "mean": 188.3,

@@ -80,3 +80,22 @@ def test_alliance_changes_move_votes_between_camps(tables):
     with_mns = forecast_features({"MNS": "UPA"})
     assert np.allclose(with_mns["upa_share"], base["upa_share"] + base["mns_share"])
     assert (forecast_features({"INC": "OTH"})["nda_margin"] >= base["nda_margin"] - 1e-9).all()
+
+
+def test_voter_roll_data_matches_press_note():
+    from voter_roll import district_rates, seat_rates
+
+    d = district_rates()
+    assert d["electors_excluded"].sum() == 20_688_487
+    assert d["electors_in_draft"].sum() == 77_165_562
+    s = seat_rates()
+    assert len(s) == TOTAL_SEATS and s["exclusion_rate"].between(0.05, 0.45).all()
+
+
+def test_voter_roll_shift_direction():
+    from voter_roll import margin_shift
+
+    seats = range(1, TOTAL_SEATS + 1)
+    assert np.allclose(margin_shift(seats, 0.2, 0.0), 0.0)        # neutral default
+    assert (margin_shift(seats, 0.2, -20.0) > 0).all()            # MVA-leaning removed -> NDA up
+    assert (margin_shift(seats, 0.2, 20.0) < 0).all()

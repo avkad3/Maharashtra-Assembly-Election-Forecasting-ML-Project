@@ -86,11 +86,18 @@ class ElectionModel:
         return self.oth_classifier.predict_proba(df[FEATURES])[:, 1]
 
     def simulate(self, df: pd.DataFrame, swing: float = 0.0, swing_sd: float = 5.0,
-                 n_sims: int = 5000, seed: int = RANDOM_STATE) -> dict:
-        """Simulate ``n_sims`` elections; return seat-level and state-level results."""
+                 n_sims: int = 5000, seed: int = RANDOM_STATE,
+                 margin_shift=None) -> dict:
+        """Simulate ``n_sims`` elections; return seat-level and state-level results.
+
+        ``margin_shift`` is an optional per-seat adjustment (pp) applied on top
+        of the model, e.g. the voter-roll scenario in ``voter_roll.py``.
+        """
         rng = np.random.default_rng(seed)
         n = len(df)
         mu = self.expected_margin(df, swing)
+        if margin_shift is not None:
+            mu = mu + np.asarray(margin_shift, dtype=float)
         p_oth = self.p_oth(df)
 
         regions, region_idx = np.unique(df["region"].to_numpy(), return_inverse=True)

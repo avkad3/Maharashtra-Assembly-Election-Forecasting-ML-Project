@@ -37,6 +37,7 @@ All data is public and lives in [`data/raw`](data/raw), re-downloadable with `py
 | `mh_2014.csv`, `mh_2019.csv` | [TCPD Lok Dhaba](https://lokdhaba.ashoka.edu.in/) via [OpenCity](https://data.opencity.in/) | Candidate-level results, turnout, electors, region |
 | `mh_2024.csv` | ECI final results via OpenCity | Candidate-level votes (EVM + postal) |
 | `mh_2024_electors.csv` | CEO Maharashtra via OpenCity | Electors per constituency (for 2024 turnout) |
+| `sir_2026_draft_district.csv` (+ press-note PDF) | [CEO Maharashtra, SIR 2026 draft roll](https://ceoelection.maharashtra.gov.in/Downloads/PDF/Notification/Press%20Note%20English_31.08.2026%20Draft%20Roll.pdf) | Electors included / excluded per district |
 
 All three elections use the same 2008 delimitation (identical constituency numbers). The cleaned data reproduces the official seat tallies (for example, BJP won 122, 105 and 132 seats in 2014, 2019 and 2024), and [tests](tests/test_pipeline.py) enforce this.
 
@@ -137,6 +138,47 @@ That last scenario is approximate. The model never saw a split opposition in tra
 
 Run the alliance scenarios from the command line with `python src/forecast.py --alliances thackeray_alliance congress_alone`, or switch them on in the dashboard sidebar.
 
+### Voter-roll revision (SIR 2026)
+
+The [draft electoral roll published on 31 Aug 2026](data/raw/sir_2026_draft_press_note.pdf) left out **2,06,88,487 of 9,78,54,049 electors (21.1%)**. Deletions are heavily urban:
+
+- **Highest exclusion rates:** Thane 38%, Mumbai City 37%, Mumbai Suburban 34%, Pune 32%, Nagpur 31%
+- **Lowest exclusion rates:** Hingoli 9%, Buldhana 9%, Ratnagiri 10%
+
+The official district figures are in [`data/raw/sir_2026_draft_district.csv`](data/raw/sir_2026_draft_district.csv).
+
+**Why this is a scenario, not a trained feature.** No past Maharashtra election had a revision like this, so a model can't learn from history whether deletions favour either camp. Adding the deletion rate as a feature would be fake learning. [`src/voter_roll.py`](src/voter_roll.py) instead applies an explicit adjustment.
+
+**How the adjustment works.** It removes a share *f* of each seat's voters and assumes they leaned *L* points relative to their seat. The seat's NDA−UPA margin then shifts by:
+
+> **−L · f / (1 − f)**, where *f* = genuine share × district exclusion rate
+
+The *genuine share* is the fraction of excluded electors who were real voters. The rest are dead, shifted or duplicate entries who wouldn't have voted in that seat anyway.
+
+**The default is neutral (*L* = 0, no effect).** There is no evidence yet on who was wrongly excluded.
+
+Sensitivity at swing 0 with 2024 alliances, from `reports/forecast_2029_voter_roll.csv`:
+
+| Genuine share | Lean of excluded voters | NDA median | MVA median | P(NDA majority) |
+|---|---|---|---|---|
+| 10% | −30 (strongly MVA) | 191 | 87 | 94% |
+| 20% | −30 | 193 | 84 | 95% |
+| 30% | −30 | 196 | 82 | 96% |
+| any | 0 (neutral) | 189 | 89 | 93% |
+| 30% | +15 (NDA) | 185 | 93 | 91% |
+
+**Finding:** even under strong assumptions, the deletions move the NDA median by only about 7 seats. The margin shift is at most a few points, and it is concentrated in urban seats that are mostly not close. The statewide swing matters far more.
+
+**Data caveats:**
+
+- **The final roll will change these figures.** It is due on 4 Nov 2026, after claims and objections add names back.
+- **Rates are per district, not per seat.** Seat-level lists exist on district election office websites and could replace the district figures.
+- **Turnout among the excluded is assumed equal to everyone else's.**
+
+**CJP protests.** The Cockroach Janta Party's October 2026 protests over the roll revision are not modelled. The movement is not a contesting party and there is no vote data, so any effect on youth turnout or mood can only be explored through the swing slider.
+
+Run the scenario from the command line with `python src/forecast.py --roll-genuine 0.2 --roll-lean -20`. In the dashboard, use the sidebar toggle or the **Voter-roll revision** tab.
+
 ## Run it
 
 ```bash
@@ -171,7 +213,8 @@ The dashboard has four tabs:
 │   ├── features.py             seat snapshots and transition datasets
 │   ├── model.py                regressor + OTH classifier + Monte Carlo simulator
 │   ├── train.py                comparison, back-test, final fit
-│   └── forecast.py             2029 scenarios
+│   ├── forecast.py             2029 scenarios
+│   └── voter_roll.py           SIR 2026 voter-roll scenario
 └── tests/                      pytest suite (runs in GitHub Actions)
 ```
 
