@@ -1,0 +1,158 @@
+{
+  "actual_2024_seats": {
+    "NDA": 235,
+    "UPA": 50,
+    "OTH": 3
+  },
+  "baselines": {
+    "persistence": {
+      "accuracy": 0.5799,
+      "macro_f1": 0.3683,
+      "seats": {
+        "NDA": 163,
+        "UPA": 100,
+        "OTH": 25
+      }
+    },
+    "uniform_swing": {
+      "accuracy": 0.6875,
+      "macro_f1": 0.3675,
+      "seats": {
+        "NDA": 212,
+        "UPA": 76,
+        "OTH": 0
+      },
+      "margin_mae": 21.468
+    }
+  },
+  "classifiers": {
+    "logistic_regression": {
+      "accuracy": 0.6701,
+      "macro_f1": 0.3844,
+      "seats": {
+        "NDA": 212,
+        "UPA": 59,
+        "OTH": 17
+      },
+      "cv_macro_f1_train": 0.4115
+    },
+    "random_forest": {
+      "accuracy": 0.5903,
+      "macro_f1": 0.3379,
+      "seats": {
+        "NDA": 171,
+        "UPA": 117,
+        "OTH": 0
+      },
+      "cv_macro_f1_train": 0.4036
+    },
+    "gradient_boosting": {
+      "accuracy": 0.4549,
+      "macro_f1": 0.3028,
+      "seats": {
+        "NDA": 129,
+        "UPA": 116,
+        "OTH": 43
+      },
+      "cv_macro_f1_train": 0.3777
+    }
+  },
+  "regressors": {
+    "ridge": {
+      "accuracy": 0.7708,
+      "macro_f1": 0.335,
+      "seats": {
+        "NDA": 265,
+        "UPA": 23,
+        "OTH": 0
+      },
+      "cv_deviation_mae_train": 17.57,
+      "margin_mae": 18.317
+    },
+    "random_forest": {
+      "accuracy": 0.7708,
+      "macro_f1": 0.3496,
+      "seats": {
+        "NDA": 261,
+        "UPA": 27,
+        "OTH": 0
+      },
+      "cv_deviation_mae_train": 17.571,
+      "margin_mae": 17.439
+    },
+    "gradient_boosting": {
+      "accuracy": 0.7292,
+      "macro_f1": 0.3491,
+      "seats": {
+        "NDA": 243,
+        "UPA": 45,
+        "OTH": 0
+      },
+      "cv_deviation_mae_train": 18.325,
+      "margin_mae": 20.27
+    }
+  },
+  "probabilistic_backtest": {
+    "accuracy": 0.7674,
+    "macro_f1": 0.4057,
+    "seats": {
+      "NDA": 259,
+      "UPA": 21,
+      "OTH": 8
+    },
+    "brier": 0.3818,
+    "margin_mae": 18.317,
+    "seat_interval_90": {
+      "NDA": {
+        "mean": 192.3,
+        "median": 192,
+        "p05": 175,
+        "p95": 209,
+        "p_majority": 1.0
+      },
+      "UPA": {
+        "mean": 62.6,
+        "median": 62,
+        "p05": 47,
+        "p95": 79,
+        "p_majority": 0.0
+      },
+      "OTH": {
+        "mean": 33.1,
+        "median": 33,
+        "p05": 25,
+        "p95": 42,
+        "p_majority": 0.0
+      }
+    },
+    "noise_used": {
+      "region_sd": 0.76,
+      "district_sd": 12.82,
+      "seat_sd": 21.04
+    }
+  },
+  "top_features": {
+    "shs_share": 1.732,
+    "upa_share": 1.092,
+    "nda_margin": 0.871,
+    "proj_margin": 0.871,
+    "nda_lean": 0.871,
+    "bjp_share": 0.83,
+    "nda_share": 0.327,
+    "win_margin": 0.272,
+    "log_electors": 0.238,
+    "n_cand": 0.168
+  },
+  "final_model": {
+    "regressor": "ridge",
+    "noise": {
+      "region_sd": 10.37,
+      "district_sd": 9.82,
+      "seat_sd": 18.69
+    },
+    "trained_on": [
+      "2014->2019",
+      "2019->2024"
+    ]
+  }
+}
