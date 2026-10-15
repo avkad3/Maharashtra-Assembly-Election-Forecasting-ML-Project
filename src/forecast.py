@@ -6,6 +6,8 @@ mood as 2024"; negative values mean a swing toward UPA/MVA.
 
     python forecast.py                 # baseline (swing 0) + scenario sweep
     python forecast.py --swing -8      # custom central scenario
+    python forecast.py --alliances thackeray_alliance congress_alone
+                                       # replay 2024 under post-2024 alliances
 """
 import argparse
 import json
@@ -17,8 +19,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from config import FIGURES_DIR, MAJORITY, MODELS_DIR, PROCESSED_DIR, REPORTS_DIR
-from features import build_all
+from config import (ALLIANCE_CHANGES, FIGURES_DIR, MAJORITY, MODELS_DIR, PROCESSED_DIR,
+                    REPORTS_DIR, alliance_changes)
+from features import build_all, forecast_features
 
 SCENARIOS = [-20, -15, -10, -5, 0, 5]
 SWING_SD = 5.0  # uncertainty around the chosen statewide swing (pp)
@@ -28,16 +31,18 @@ def load_model():
     return joblib.load(MODELS_DIR / "election_model.joblib")["model"]
 
 
-def load_forecast_features() -> pd.DataFrame:
+def load_forecast_features(changes: dict[str, str] | None = None) -> pd.DataFrame:
+    if changes:
+        return forecast_features(changes)
     path = PROCESSED_DIR / "features_forecast.csv"
     if not path.exists():
         build_all()
     return pd.read_csv(path)
 
 
-def run(swing: float, n_sims: int = 5000) -> dict:
+def run(swing: float, n_sims: int = 5000, changes: dict[str, str] | None = None) -> dict:
     model = load_model()
-    df = load_forecast_features()
+    df = load_forecast_features(changes)
     sim = model.simulate(df, swing=swing, swing_sd=SWING_SD, n_sims=n_sims)
     seats = df[["ac_no", "ac_name", "district", "region", "ac_type", "winner_party",
                 "winner_camp", "nda_margin"]].rename(columns={
@@ -83,16 +88,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--swing", type=float, default=0.0)
     parser.add_argument("--sims", type=int, default=5000)
+    parser.add_argument("--alliances", nargs="*", default=[], choices=list(ALLIANCE_CHANGES),
+                        help="post-2024 alliance changes to apply to the 2024 base")
     args = parser.parse_args()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    changes = alliance_changes(args.alliances)
 
-    sim = run(args.swing, args.sims)
+    sim = run(args.swing, args.sims, changes)
     sim["seat_probs"].to_csv(REPORTS_DIR / "forecast_2029_seats.csv", index=False)
     plot_distribution(sim["seat_draws"], args.swing)
 
     rows = []
     for s in sorted(set(SCENARIOS + [args.swing])):
-        summ = run(s, 2000)["summary"]
+        summ = run(s, 2000, changes)["summary"]
         row = {"swing": s}
         for camp, st in summ.items():
             row.update({f"{camp}_{k}": v for k, v in st.items()})
@@ -101,13 +109,28 @@ def main() -> None:
     table.to_csv(REPORTS_DIR / "forecast_2029_scenarios.csv", index=False)
     plot_scenarios(table)
 
+    # Same statewide mood, different alliance structures.
+    combos = {"2024 alliances": []}
+    combos.update({ALLIANCE_CHANGES[k]["label"]: [k] for k in ALLIANCE_CHANGES})
+    combos["Both changes"] = list(ALLIANCE_CHANGES)
+    alliance_rows = []
+    for label, keys in combos.items():
+        summ = run(args.swing, 2000, alliance_changes(keys))["summary"]
+        alliance_rows.append({"alliances": label,
+                              **{f"{c}_median": summ[c]["median"] for c in summ},
+                              "NDA_p_majority": summ["NDA"]["p_majority"],
+                              "UPA_p_majority": summ["UPA"]["p_majority"]})
+    alliance_table = pd.DataFrame(alliance_rows)
+    alliance_table.to_csv(REPORTS_DIR / "forecast_2029_alliance_scenarios.csv", index=False)
+
     with open(REPORTS_DIR / "forecast_2029_summary.json", "w") as f:
-        json.dump({"swing": args.swing, "swing_sd": SWING_SD, "summary": sim["summary"]},
-                  f, indent=2)
+        json.dump({"swing": args.swing, "swing_sd": SWING_SD, "alliances": args.alliances,
+                   "summary": sim["summary"]}, f, indent=2)
     print(f"Central scenario: swing {args.swing:+.1f} pp")
     print(json.dumps(sim["summary"], indent=2))
     print(table[["swing", "NDA_median", "NDA_p05", "NDA_p95", "UPA_median",
                  "NDA_p_majority", "UPA_p_majority"]].to_string(index=False))
+    print(alliance_table.to_string(index=False))
 
 
 if __name__ == "__main__":

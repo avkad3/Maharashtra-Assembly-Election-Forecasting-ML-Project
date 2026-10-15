@@ -111,6 +111,32 @@ How to read this:
 - **At zero swing the median (189) is below the 235 seats the NDA won in 2024.** The model expects reversion in individual seats even if the statewide vote holds. That is what the 2014→2019→2024 history shows, but see the back-test caveat above.
 - **These are scenarios, not a prediction of the 2029 statewide vote.** That depends on events after 2024: alliance changes, leadership and the national mood.
 
+### Current conditions (as of October 2026)
+
+Several things have changed since the November 2024 election. The table shows how each one is handled:
+
+| Development since 2024 | How it is handled |
+|---|---|
+| **Local elections, Dec 2025 – Jan 2026:** Mahayuti swept the municipal corporations. BJP won 1,416 corporators, Shiv Sena 397, NCP 160, Congress 324, Shiv Sena (UBT) 153, NCP (SP) 36. BJP became the largest party in Mumbai's corporation (89 of 227). | Evidence for keeping the **default swing at 0**: there is no sign of a shift away from the NDA. Local elections are a different kind of contest and only seat counts are published, so they are not fed into the model as data. |
+| **Shiv Sena (UBT) allied with MNS** for the Mumbai corporation polls | Alliance option `thackeray_alliance`: MNS's 2024 votes count toward the MVA |
+| **Congress contested the local polls alone** | Alliance option `congress_alone`: Congress counts as a separate force, so the opposition vote is split |
+| **Ajit Pawar died on 28 Jan 2026.** Sunetra Pawar now leads NCP and holds Baramati. | Not modelled: its effect on the NCP vote can't be measured without polling |
+
+Results with the 2024 statewide mood held constant (swing 0):
+
+| Alliance structure | NDA (median) | MVA (median) | Others (median) | P(NDA majority) |
+|---|---|---|---|---|
+| 2024 alliances | 189 | 89 | 10 | 93% |
+| Shiv Sena (UBT) + MNS | 185 | 93 | 10 | 91% |
+| Congress contests separately | 207 | 67 | 14 | 99% |
+| Both changes | 204 | 70 | 14 | 99% |
+
+The Thackeray tie-up adds only a few seats to the opposition, because MNS took about 1.5% of the statewide vote in 2024. A Congress–MVA split is far more damaging to the opposition.
+
+That last scenario is approximate. The model never saw a split opposition in training, so Congress's own wins are probably under-counted in "Others".
+
+Run the alliance scenarios from the command line with `python src/forecast.py --alliances thackeray_alliance congress_alone`, or switch them on in the dashboard sidebar.
+
 ## Run it
 
 ```bash

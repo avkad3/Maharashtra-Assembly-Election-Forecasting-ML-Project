@@ -71,3 +71,12 @@ def test_swing_moves_seats_in_the_right_direction(tables):
     low = model.simulate(sets["forecast"], swing=-15, n_sims=500)["summary"]["NDA"]["mean"]
     high = model.simulate(sets["forecast"], swing=5, n_sims=500)["summary"]["NDA"]["mean"]
     assert high > low
+
+
+def test_alliance_changes_move_votes_between_camps(tables):
+    from features import forecast_features
+
+    base = forecast_features()
+    with_mns = forecast_features({"MNS": "UPA"})
+    assert np.allclose(with_mns["upa_share"], base["upa_share"] + base["mns_share"])
+    assert (forecast_features({"INC": "OTH"})["nda_margin"] >= base["nda_margin"] - 1e-9).all()

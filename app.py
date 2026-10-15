@@ -8,7 +8,8 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from config import MAJORITY, PROCESSED_DIR, REPORTS_DIR  # noqa: E402
+from config import (ALLIANCE_CHANGES, MAJORITY, PROCESSED_DIR,  # noqa: E402
+                    REPORTS_DIR, alliance_changes)
 from forecast import load_forecast_features, load_model  # noqa: E402
 
 st.set_page_config(page_title="Maharashtra 2029 Forecast", page_icon="🗳️", layout="wide")
@@ -20,13 +21,13 @@ def get_model():
 
 
 @st.cache_data
-def get_features():
-    return load_forecast_features()
+def get_features(alliance_keys: tuple[str, ...]):
+    return load_forecast_features(alliance_changes(alliance_keys))
 
 
 @st.cache_data
-def simulate(swing: float, swing_sd: float, n_sims: int):
-    df = get_features()
+def simulate(swing: float, swing_sd: float, n_sims: int, alliance_keys: tuple[str, ...]):
+    df = get_features(alliance_keys)
     sim = get_model().simulate(df, swing=swing, swing_sd=swing_sd, n_sims=n_sims)
     seats = df[["ac_no", "ac_name", "district", "region", "ac_type", "winner_party",
                 "winner_camp", "nda_margin"]].merge(sim["seat_probs"], on="ac_no")
@@ -47,18 +48,40 @@ with st.sidebar:
              "Negative = swing towards UPA/MVA.")
     swing_sd = st.slider("Uncertainty in that swing (pp, SD)", 0.0, 10.0, 5.0, 0.5)
     n_sims = st.select_slider("Simulations", [1000, 2000, 5000, 10000], value=5000)
+    st.header("Alliance changes since 2024")
+    alliance_keys = tuple(
+        key for key, a in ALLIANCE_CHANGES.items()
+        if st.checkbox(a["label"], help=a["note"])
+    )
     st.markdown(
         "**How to read this:** each simulation draws a statewide swing, then "
         "correlated region, district and seat errors sized from the model's "
         "real 2024 back-test error."
     )
 
-seats, draws, summary = simulate(swing, swing_sd, n_sims)
+seats, draws, summary = simulate(swing, swing_sd, n_sims, alliance_keys)
 
 tab_fc, tab_seats, tab_bt, tab_hist = st.tabs(
     ["Forecast", "Constituency explorer", "2024 back-test", "History"])
 
 with tab_fc:
+    with st.expander("Current conditions (as of Oct 2026): what has changed since 2024", expanded=False):
+        st.markdown(
+            "- **2025-26 local body polls (Dec 2025 - Jan 2026):** Mahayuti swept the "
+            "municipal corporations (BJP 1,416, Shiv Sena 397, NCP 160 corporators vs "
+            "Congress 324, Shiv Sena (UBT) 153, NCP (SP) 36). BJP became the largest party "
+            "in the BMC (89/227). No sign of a swing away from NDA, so **0 is a reasonable "
+            "default swing**; seat counts alone don't give a vote-share number.\n"
+            "- **Congress contested the local polls alone** and **Shiv Sena (UBT) allied "
+            "with MNS** in Mumbai: toggle these in the sidebar.\n"
+            "- **Ajit Pawar died in a plane crash on 28 Jan 2026**; Sunetra Pawar now leads "
+            "NCP and holds Baramati. Its effect on the NCP vote can't be measured without "
+            "polling, so it's not modelled.\n\n"
+            "Local-body results are a different kind of election and are not fed into the model."
+        )
+    if alliance_keys:
+        st.info("Applied: " + "; ".join(ALLIANCE_CHANGES[k]["label"] for k in alliance_keys)
+                + ". " + " ".join(ALLIANCE_CHANGES[k]["note"] for k in alliance_keys))
     cols = st.columns(4)
     for col, camp in zip(cols, ["NDA", "UPA", "OTH"]):
         s = summary[camp]

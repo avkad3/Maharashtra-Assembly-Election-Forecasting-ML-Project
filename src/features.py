@@ -108,6 +108,28 @@ def build_transition(cands, seats, const, year: int, next_year: int | None,
     return df
 
 
+def apply_alliance_changes(cands: pd.DataFrame, year: int,
+                           changes: dict[str, str] | None) -> pd.DataFrame:
+    """Re-assign parties to a different camp for one election (what-if alliances).
+
+    Used to replay the 2024 base under post-2024 alliance structures, e.g.
+    ``{"MNS": "UPA"}`` for the Shiv Sena (UBT)-MNS tie-up.
+    """
+    if not changes:
+        return cands
+    out = cands.copy()
+    for party, camp in changes.items():
+        out.loc[(out["year"] == year) & (out["party"] == party), "camp"] = camp
+    return out
+
+
+def forecast_features(changes: dict[str, str] | None = None) -> pd.DataFrame:
+    """2024 seat snapshot for the 2029 forecast, optionally with alliance changes."""
+    cands, seats, const = load_tables()
+    cands = apply_alliance_changes(cands, 2024, changes)
+    return build_transition(cands, seats, const, 2024, 2029, swing=0.0)
+
+
 def build_all() -> dict[str, pd.DataFrame]:
     cands, seats, const = load_tables()
     out = {

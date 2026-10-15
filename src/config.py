@@ -80,3 +80,28 @@ FEATURE_PARENT = {
 }
 
 CAMP_LABELS = ["NDA", "UPA", "OTH"]
+
+# Alliance changes observed after the Nov 2024 election, applied to the 2024
+# base for the 2029 forecast. Each maps party -> camp it would count toward.
+ALLIANCE_CHANGES = {
+    "thackeray_alliance": {
+        "label": "Shiv Sena (UBT) + MNS alliance",
+        "note": "Uddhav and Raj Thackeray's parties allied for the Jan 2026 BMC polls.",
+        "changes": {"MNS": "UPA"},
+    },
+    "congress_alone": {
+        "label": "Congress contests separately from MVA",
+        "note": "Congress went solo in the Dec 2025-Jan 2026 local body polls. "
+                "INC is then counted as 'OTH', so OTH seats include Congress wins. "
+                "Approximate: the model never saw a split opposition in training, "
+                "so Congress's own wins are likely under-counted.",
+        "changes": {"INC": "OTH"},
+    },
+}
+
+
+def alliance_changes(keys) -> dict[str, str]:
+    merged: dict[str, str] = {}
+    for key in keys:
+        merged.update(ALLIANCE_CHANGES[key]["changes"])
+    return merged

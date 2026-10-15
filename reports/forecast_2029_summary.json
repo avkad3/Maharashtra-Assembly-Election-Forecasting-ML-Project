@@ -1,6 +1,7 @@
 {
   "swing": 0.0,
   "swing_sd": 5.0,
+  "alliances": [],
   "summary": {
     "NDA": {
       "mean": 188.3,
